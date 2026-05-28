@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  frontend:
+    container_name: ecommerce-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on: 
+      - backend
+    ports:
+      - "3000:3000"
+    restart: always
+
+    stdin_open: true
+    tty: true
+
+    networks:
+      - ecommerce-app-nw
+
+  backend:
+    container_name: ecommerce-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on: 
+      - database
+    ports:
+      - "5000:5000"
+    restart: always
+    environment:
+      - MONGO_URI=mongodb://ecommerce-database:27017/ecommerce
+    networks:
+      - ecommerce-app-nw
+
+  database:
+    container_name: ecommerce-database
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - ecommerce-app-nw
+
+networks:
+  ecommerce-app-nw:
+
+volumes:
+  mongo-data:

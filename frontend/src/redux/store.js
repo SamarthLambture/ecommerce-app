@@ -6,11 +6,14 @@ import rootReducer from "./root-reducer";
 
 const middleware = [thunk, logger];
 
+// 1. Setup a safe compose enhancer that handles browsers without the extension
+const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
+
+// 2. Use the enhancer here instead of standard compose
 const store = createStore(
   rootReducer,
-  compose(
-    applyMiddleware(...middleware),
-    window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()
+  composeEnhancers(
+    applyMiddleware(...middleware)
   )
 );
 
