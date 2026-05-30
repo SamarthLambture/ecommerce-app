@@ -3,7 +3,7 @@ name: Build and ship gitOps repo
 on:
   push:
     branches:
-      - main
+      - master
 
 env:
   INFRA_REPO_OWNER: samarthlambture
@@ -12,7 +12,7 @@ env:
 jobs:
   build-and-ship:
     runs-on: ubuntu-latest
-    
+
     steps:
 
       # 1: checkout code
@@ -25,7 +25,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USEWRNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
+
       # 3: build and push frontend image
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
