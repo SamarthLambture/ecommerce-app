@@ -1,6 +1,6 @@
 const sections = [
   {
-    title: "hats",
+    title: "jackets_hats",
     imageUrl: "https://i.ibb.co/cvpntL1/hats.png",
     id: 1,
     linkUrl: "shop/hats",
