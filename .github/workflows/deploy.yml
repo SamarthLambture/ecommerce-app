@@ -23,7 +23,7 @@ jobs:
       - name: Dockerhub login
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USEWRNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # 3: build and push frontend image
