@@ -7,7 +7,7 @@ on:
 
 env:
   INFRA_REPO_OWNER: samarthlambture
-  INFRA_REPO_NAME: ecommerce-infra-gitpos
+  INFRA_REPO_NAME: ecommerce-infra-gitops
 
 jobs:
   build-and-ship:
