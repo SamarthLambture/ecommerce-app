@@ -58,8 +58,8 @@ jobs:
       - name: Updation in image tags
         run: |
           cd infra-repo/k8s-manifest
-          sed -i "s|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-frontend:.*|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}|g" deployment.yml
-          sed -i "s|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-backend:.*|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}|g" deployment.yml
+          sed -i "s|image:${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:.*|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}|g" deployment.yml
+          sed -i "s|image:${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:.*|image:${{ DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}|g" deployment.yml
 
       # 7: push code to infra repo
       - name: Push changes to infra-repo
