@@ -30,5 +30,13 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(__dirname, "../frontend", "build", "index.html"));
   });
 }
+
+const client = require('prom-client');
+client.collectDefaultMetrics();
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
 // listen to the port
 app.listen(PORT);
