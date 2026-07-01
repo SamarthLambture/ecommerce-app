@@ -1,10 +1,8 @@
-FROM node:20-alpine
+FROM node:14-alpine
 
 WORKDIR /app
 
 COPY package*.json .
-
-RUN apk add --no-cache python3 make g++
 
 RUN npm install
 
