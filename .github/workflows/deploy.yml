@@ -1,3 +1,82 @@
+# name: Build and ship gitOps repo
+
+# on:
+#   push:
+#     branches:
+#       - master
+
+# env:
+#   INFRA_REPO_OWNER: samarthlambture
+#   INFRA_REPO_NAME: ecommerce-infra-gitops
+
+# jobs:
+#   build-and-ship:
+#     runs-on: ubuntu-latest
+
+#     steps:
+
+#       # 1: checkout code
+#       - name: Checkout application code
+#         uses: actions/checkout@v4
+
+#       # 2: docker login
+#       - name: Dockerhub login
+#         uses: docker/login-action@v3
+#         with:
+#           username: ${{ secrets.DOCKERHUB_USERNAME }}
+#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+#       # 3: build and push frontend image
+#       - name: Build and push frontend image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./frontend
+#           push: true
+#           tags: |
+#             ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}
+#             ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:latest
+
+#       # 4: build and push backend image
+#       - name: Build and push backend image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./backend
+#           push: true
+#           tags: |
+#             ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}
+#             ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:latest
+
+#       # 5: checkout infra repo
+#       - name: Checking out Infra repo
+#         uses: actions/checkout@v4
+#         with:
+#           repository: ${{ env.INFRA_REPO_OWNER }}/${{ env.INFRA_REPO_NAME }}
+#           token: ${{ secrets.GITOPS_PAT }}
+#           path: infra-repo
+
+#       # 6: update image tags
+#       - name: Updation in image tags
+#         run: |
+#           cd infra-repo/k8s-manifest
+          
+#           sed -i "/ecommerce-store-frontend/s|image:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}|g" deployment.yml
+          
+#           sed -i "/ecommerce-store-backend/s|image:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}|g" deployment.yml
+          
+#           echo "=== VERIFYING MANIFEST CHANGES ==="
+#           cat deployment.yml
+
+#       # 7: push code to infra repo
+#       - name: Push changes to infra-repo
+#         run: |
+#           cd infra-repo
+#           git config --global user.name "GitHub Actions Bot"
+#           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+#           git add k8s-manifest/deployment.yml
+#           git commit -m "chore: automated image tag update to ${{ github.sha }} from app repo" || true
+#           git push origin main
+
+
 name: Build and ship gitOps repo
 
 on:
@@ -10,43 +89,124 @@ env:
   INFRA_REPO_NAME: ecommerce-infra-gitops
 
 jobs:
-  build-and-ship:
+  # ---------------------------------------------------------------------
+  # STAGE 1: SAST + SCA — runs before anything gets built or pushed
+  # ---------------------------------------------------------------------
+  security-scan:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      security-events: write   # needed to upload SARIF to the Security tab
     steps:
+      - name: Checkout application code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # SonarQube wants full history for blame/new-code analysis
 
-      # 1: checkout code
+      # --- Trivy: filesystem / dependency / IaC scan ---
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          format: sarif
+          output: trivy-fs-report.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'   # don't fail the job here — we upload results and let SARIF show it
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs-report.sarif
+
+      - name: Trivy scan (fail build on critical, human-readable)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: '.'
+          format: table
+          severity: CRITICAL
+          exit-code: '1'   # actually fail the pipeline if CRITICAL vulns exist
+
+      # --- SonarCloud: SAST ---
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # No SONAR_HOST_URL needed — sonarqube-scan-action defaults to https://sonarcloud.io
+        # sonar.organization and sonar.projectKey come from sonar-project.properties
+
+      - name: SonarCloud quality gate check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ---------------------------------------------------------------------
+  # STAGE 2: Build images, scan images, push only if clean
+  # ---------------------------------------------------------------------
+  build-and-ship:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout application code
         uses: actions/checkout@v4
 
-      # 2: docker login
       - name: Dockerhub login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 3: build and push frontend image
-      - name: Build and push frontend image
+      # --- Frontend: build locally, scan, then push ---
+      - name: Build frontend image (local)
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:latest
+          push: false
+          load: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}
 
-      # 4: build and push backend image
-      - name: Build and push backend image
+      - name: Trivy scan - frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Push frontend image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:latest
+
+      # --- Backend: build locally, scan, then push ---
+      - name: Build backend image (local)
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:latest
+          push: false
+          load: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}
 
-      # 5: checkout infra repo
+      - name: Trivy scan - backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Push backend image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:latest
+
+      # --- GitOps handoff (unchanged from your original) ---
       - name: Checking out Infra repo
         uses: actions/checkout@v4
         with:
@@ -54,19 +214,17 @@ jobs:
           token: ${{ secrets.GITOPS_PAT }}
           path: infra-repo
 
-      # 6: update image tags
       - name: Updation in image tags
         run: |
           cd infra-repo/k8s-manifest
-          
+
           sed -i "/ecommerce-store-frontend/s|image:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-frontend:${{ github.sha }}|g" deployment.yml
-          
+
           sed -i "/ecommerce-store-backend/s|image:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-store-backend:${{ github.sha }}|g" deployment.yml
-          
+
           echo "=== VERIFYING MANIFEST CHANGES ==="
           cat deployment.yml
 
-      # 7: push code to infra repo
       - name: Push changes to infra-repo
         run: |
           cd infra-repo
@@ -75,3 +233,42 @@ jobs:
           git add k8s-manifest/deployment.yml
           git commit -m "chore: automated image tag update to ${{ github.sha }} from app repo" || true
           git push origin main
+
+  # ---------------------------------------------------------------------
+  # STAGE 3: Notify — always runs, regardless of pass/fail
+  # ---------------------------------------------------------------------
+  notify:
+    needs: [security-scan, build-and-ship]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set pipeline status
+        id: status
+        run: |
+          if [ "${{ needs.security-scan.result }}" == "success" ] && [ "${{ needs.build-and-ship.result }}" == "success" ]; then
+            echo "result=SUCCESS" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=FAILED" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "[${{ steps.status.outputs.result }}] ecommerce pipeline — ${{ github.repository }} — ${{ github.sha }}"
+          to: ${{ secrets.NOTIFY_EMAIL_TO }}
+          from: GitHub Actions <${{ secrets.SMTP_USERNAME }}>
+          body: |
+            Pipeline status: ${{ steps.status.outputs.result }}
+
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Triggered by: ${{ github.actor }}
+
+            Security scan job: ${{ needs.security-scan.result }}
+            Build and ship job: ${{ needs.build-and-ship.result }}
+
+            Run details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
