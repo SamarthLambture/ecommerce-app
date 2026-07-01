@@ -133,8 +133,10 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v3
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # No SONAR_HOST_URL needed — sonarqube-scan-action defaults to https://sonarcloud.io
-        # sonar.organization and sonar.projectKey come from sonar-project.properties
+        with:
+          args: >
+            -Dsonar.organization=samarthlambture
+            -Dsonar.projectKey=SamarthLambture_ecommerce-app
 
       - name: SonarCloud quality gate check
         uses: sonarsource/sonarqube-quality-gate-action@master
