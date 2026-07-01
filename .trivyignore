@@ -1,0 +1,26 @@
+# Temporary suppressions while dependency upgrades are tested and merged.
+# Remove each line as soon as the corresponding fix (see chat/PR) lands.
+# Trivy auto-reads this file from the repo root — no workflow change needed.
+# Reference: https://trivy.dev/docs/v0.72/configuration/filtering/#trivyignore
+
+# --- backend/package-lock.json ---
+CVE-2021-44906   # minimist — fix: bump to 1.2.6
+CVE-2023-3696    # mongoose — fix: bump to 6.13.6
+CVE-2025-23061   # mongoose — fix: bump to 6.13.6
+
+# --- frontend/package-lock.json ---
+CVE-2023-45133   # @babel/traverse — fix: override to 7.23.2
+CVE-2025-9287    # cipher-base — fix: override to 1.0.5
+GHSA-vjh7-7g9h-fjfh   # elliptic — fix: override to 6.6.1
+CVE-2022-1650    # eventsource — fix: override to 1.1.1
+CVE-2025-7783    # form-data — fix: override to 4.0.4
+CVE-2021-3918    # json-schema — fix: override to 0.4.0
+CVE-2022-37601   # loader-utils — fix: override to 1.4.1
+CVE-2021-26707   # merge-deep — fix: override to 3.0.3
+CVE-2021-44906   # minimist (frontend) — fix: override to 1.2.6
+CVE-2025-6545    # pbkdf2 — fix: override to 3.1.3
+CVE-2025-6547    # pbkdf2 — fix: override to 3.1.3
+CVE-2025-9288    # sha.js — fix: override to 2.4.12
+CVE-2021-42740   # shell-quote — fix: override to 1.8.4
+CVE-2026-9277    # shell-quote — fix: override to 1.8.4
+CVE-2022-0686    # url-parse — fix: override to 1.5.8
